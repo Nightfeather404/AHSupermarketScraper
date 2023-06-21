@@ -1,14 +1,10 @@
-import random
 import time
 import re
 import urllib.parse
 import asyncio
 import aiohttp
-import proxygrab
-import async_timeout
 from proxyscrape import create_collector
 from bs4 import BeautifulSoup
-
 albert_heijn_url = "https://www.ah.nl"
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36"
@@ -26,15 +22,15 @@ async def fetch_product_categories(session):
         return product_categories_links
 
 
-async def fetch_category_page(session, category_link, proxy):
+async def fetch_category_page(session, category_link):
     url = urllib.parse.urljoin(albert_heijn_url, category_link)
-    async with session.get(url, proxy=proxy) as response:
+    async with session.get(url) as response:
         return await response.text()
 
 
-async def fetch_product_page(session, product_link, proxy):
+async def fetch_product_page(session, product_link):
     url = urllib.parse.urljoin(albert_heijn_url, product_link)
-    async with session.get(url, proxy=proxy) as response:
+    async with session.get(url) as response:
         return await response.text()
 
 
@@ -63,8 +59,7 @@ async def get_product_links(max_calories=300, rate_limit=5, sleep_time=1.0):
         product_categories_links = await fetch_product_categories(session)
         tasks = []
         for i, product_categories_link in enumerate(product_categories_links):
-            proxy = await get_random_proxy()
-            task = asyncio.ensure_future(fetch_category_page(session, product_categories_link, proxy))
+            task = asyncio.ensure_future(fetch_category_page(session, product_categories_link))
             tasks.append(task)
 
         category_pages = await asyncio.gather(*tasks)
@@ -86,8 +81,7 @@ async def get_product_links(max_calories=300, rate_limit=5, sleep_time=1.0):
         tasks = []
         for i, product_categories_link in enumerate(product_categories_links):
             product_category_link = albert_heijn_url + product_categories_link + "?page=" + str(max_pagination)
-            proxy = await get_random_proxy()
-            task = asyncio.ensure_future(fetch_category_page(session, product_category_link, proxy))
+            task = asyncio.ensure_future(fetch_category_page(session, product_category_link))
             tasks.append(task)
 
         product_category_pages = await asyncio.gather(*tasks)
@@ -99,8 +93,7 @@ async def get_product_links(max_calories=300, rate_limit=5, sleep_time=1.0):
 
             for product_card in product_cards:
                 product_link = product_card.find("a")["href"]
-                proxy = await get_random_proxy()
-                task = asyncio.ensure_future(fetch_product_page(session, product_link, proxy))
+                task = asyncio.ensure_future(fetch_product_page(session, product_link))
                 tasks.append(task)
                 await asyncio.sleep(sleep_time)  # Introduce a delay between requests
 
