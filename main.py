@@ -1,14 +1,16 @@
-import time
+import collections
+import random
 import re
 import urllib.parse
 import asyncio
 import aiohttp
-from proxyscrape import create_collector
 from bs4 import BeautifulSoup
+
 albert_heijn_url = "https://www.ah.nl"
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36"
 }
+ProductInfo = collections.namedtuple('ProductInfo', ['link', 'calories'])
 
 
 async def fetch_product_categories(session):
@@ -34,93 +36,50 @@ async def fetch_product_page(session, product_link):
         return await response.text()
 
 
-async def get_random_proxy():
-    collector = create_collector('my-collector', 'http')
-    while True:
-        proxy = collector.get_proxy()
-        proxy_str = f"{proxy.host}:{proxy.port}"
-        print(proxy_str)
-        try:
-            async with aiohttp.ClientSession() as session:
-                timeout = aiohttp.ClientTimeout(total=5)  # Set a timeout of 5 seconds
-                async with session.get("https://www.google.com", proxy=f"http://{proxy_str}",
-                                       timeout=timeout) as response:
-                    if response.status == 200:
-                        print('Success!')
-                        return f"http://{proxy_str}"
-        except (aiohttp.ClientError, asyncio.TimeoutError):
-            pass
-
-
-async def get_product_links(max_calories=300, rate_limit=5, sleep_time=1.0):
-    all_product_links = []
+async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5):
+    all_products_info = []
     connector = aiohttp.TCPConnector(limit=rate_limit, limit_per_host=rate_limit, ssl=False)
     async with aiohttp.ClientSession(headers=headers, connector=connector) as session:
         product_categories_links = await fetch_product_categories(session)
         tasks = []
+
         for i, product_categories_link in enumerate(product_categories_links):
             task = asyncio.ensure_future(fetch_category_page(session, product_categories_link))
             tasks.append(task)
+            await asyncio.sleep(random.uniform(3, 5)) # Introduce a delay between requests
 
-        category_pages = await asyncio.gather(*tasks)
-
-        start_time = time.time()
-
-        load_more_element = BeautifulSoup(category_pages[0], "html.parser").find(attrs={"data-testhook": "load-more"})
-        span_element = load_more_element.find_previous_sibling("span", class_="typography_root__Om3Wh")
-
-        max_pagination = 1
-        if span_element:
-            text = span_element.text
-            numbers = re.findall(r'\d+', text)
-            if len(numbers) >= 2:
-                total_results = int(numbers[1])
-                products_per_page = 36
-                max_pagination = (total_results + products_per_page - 1) // products_per_page
-
-        tasks = []
-        for i, product_categories_link in enumerate(product_categories_links):
-            product_category_link = albert_heijn_url + product_categories_link + "?page=" + str(max_pagination)
-            task = asyncio.ensure_future(fetch_category_page(session, product_category_link))
-            tasks.append(task)
-
-        product_category_pages = await asyncio.gather(*tasks)
-
-        tasks = []
-        for i, category_page in enumerate(product_category_pages):
-            product_category_content = BeautifulSoup(category_page, "html.parser").find(id="start-of-content")
+            product_category_page = await task
+            product_category_content = BeautifulSoup(product_category_page, "html.parser").find(id="start-of-content")
             product_cards = product_category_content.find_all(attrs={"data-testhook": "product-card"})
 
             for product_card in product_cards:
                 product_link = product_card.find("a")["href"]
                 task = asyncio.ensure_future(fetch_product_page(session, product_link))
                 tasks.append(task)
-                await asyncio.sleep(sleep_time)  # Introduce a delay between requests
+                await asyncio.sleep(random.uniform(3, 5))  # Introduce a delay between requests
 
-        product_pages = await asyncio.gather(*tasks)
+                product_page = await task
+                product_content = BeautifulSoup(product_page, "html.parser").find(id="start-of-content")
+                calories_data_element = product_content.find('td', string=lambda table_data_text: table_data_text and 'kcal' in table_data_text)
+                # check if product page contains nutritional values data
+                if calories_data_element is None:
+                    break
+                text = calories_data_element.text
+                calories = re.search(r'\((\d+) kcal\)', text)
+                if calories:
+                    calorie_value_of_product = int(calories.group(1))
+                    if calorie_value_of_product <= max_calories:
+                        product_info = ProductInfo(link=product_link,
+                                                   calories=str(calorie_value_of_product) + " kcal per 100 Gram")
+                        all_products_info.append(product_info)
+                        print("\nproduct link: ", product_info.link)
+                        print("calories: ", product_info.calories)
 
-        for product_page, product_link in zip(product_pages, all_product_links):
-            product_content = BeautifulSoup(product_page, "html.parser").find(id="start-of-content")
-            calories_table_data_element = product_content \
-                .find('td', string=lambda table_data_text: table_data_text and 'kcal' in table_data_text)
-            text = calories_table_data_element.text
-            calories = re.search(r'\((\d+) kcal\)', text)
-            if calories:
-                calorie_value_of_product = int(calories.group(1))
-                if calorie_value_of_product <= max_calories:
-                    all_product_links.append(product_link)
-                    print("product link: ", product_link)
-
-        end_time = time.time()
-
-    elapsed_time = end_time - start_time
-    print(f"Execution time: {elapsed_time} seconds")
-
-    return all_product_links
+    return all_products_info
 
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    product_links = loop.run_until_complete(get_product_links(250, 5, 0.1))
-    print("product links: ", product_links)
+    products_info = loop.run_until_complete(get_products_info_within_calorie_range(250, 5))
+    print("products info: ", products_info)
     loop.close()
