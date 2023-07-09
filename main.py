@@ -80,7 +80,7 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
     return all_products_info
 
 
-async def create_pdf(products_info):
+async def create_pdf(products_info, max_calories):
     pdf = FPDF()
     pdf.add_page()
 
@@ -98,11 +98,12 @@ async def create_pdf(products_info):
         pdf.cell(0, 10, "", ln=True)  # Add empty line between entries
 
     # Save the PDF
-    pdf.output("products_info.pdf")
+    pdf.output(f"products_info_within_calorie_range_of_{max_calories}.pdf")
+    print("PDF created!")
 
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     products_info = loop.run_until_complete(get_products_info_within_calorie_range(250, 5))
-    loop.run_until_complete(create_pdf(products_info))
+    loop.run_until_complete(create_pdf(products_info, 250))
     loop.close()
