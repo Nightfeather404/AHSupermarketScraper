@@ -5,6 +5,7 @@ import urllib.parse
 import asyncio
 import aiohttp
 from bs4 import BeautifulSoup
+from fpdf import FPDF
 
 albert_heijn_url = "https://www.ah.nl"
 headers = {
@@ -46,7 +47,7 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
         for i, product_categories_link in enumerate(product_categories_links):
             task = asyncio.ensure_future(fetch_category_page(session, product_categories_link))
             tasks.append(task)
-            await asyncio.sleep(random.uniform(3, 5)) # Introduce a delay between requests
+            await asyncio.sleep(random.uniform(3, 5))  # Introduce a delay between requests
 
             product_category_page = await task
             product_category_content = BeautifulSoup(product_category_page, "html.parser").find(id="start-of-content")
@@ -60,7 +61,8 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
 
                 product_page = await task
                 product_content = BeautifulSoup(product_page, "html.parser").find(id="start-of-content")
-                calories_data_element = product_content.find('td', string=lambda table_data_text: table_data_text and 'kcal' in table_data_text)
+                calories_data_element = product_content.find('td', string=lambda
+                    table_data_text: table_data_text and 'kcal' in table_data_text)
                 # check if product page contains nutritional values data
                 if calories_data_element is None:
                     break
@@ -69,7 +71,7 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
                 if calories:
                     calorie_value_of_product = int(calories.group(1))
                     if calorie_value_of_product <= max_calories:
-                        product_info = ProductInfo(link=product_link,
+                        product_info = ProductInfo(link=albert_heijn_url + str(product_card.find("a")["href"]),
                                                    calories=str(calorie_value_of_product) + " kcal per 100 Gram")
                         all_products_info.append(product_info)
                         print("\nproduct link: ", product_info.link)
@@ -78,8 +80,29 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
     return all_products_info
 
 
+async def create_pdf(products_info):
+    pdf = FPDF()
+    pdf.add_page()
+
+    # Set font style and size
+    pdf.set_font("Arial", size=12)
+
+    # Add content to the PDF
+    for product_info in products_info:
+        link = product_info.link
+        calories = product_info.calories
+
+        # Write the product link and calories to the PDF
+        pdf.cell(0, 10, f"Product Link: {link}", ln=True)
+        pdf.cell(0, 10, f"Calories: {calories}", ln=True)
+        pdf.cell(0, 10, "", ln=True)  # Add empty line between entries
+
+    # Save the PDF
+    pdf.output("products_info.pdf")
+
+
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     products_info = loop.run_until_complete(get_products_info_within_calorie_range(250, 5))
-    print("products info: ", products_info)
+    loop.run_until_complete(create_pdf(products_info))
     loop.close()
