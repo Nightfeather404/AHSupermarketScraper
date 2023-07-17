@@ -86,7 +86,13 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
                 # TODO: get product name
                 product_name = product_content.find("h1", class_=re.compile("^product-card-header_title")).text
                 product_price = product_content.find(attrs={"data-testhook": "price-amount"}).text
-                print("product price: ", product_price)
+                product_summary = product_content.find(attrs={"data-testhook": "product-summary"}).text
+                product_info_description = product_content.find(attrs={"data-testhook": "product-info-description"}).text
+                product_image_src = product_content.find(attrs={"data-testhook": "product-image"})["src"]
+                product_info_content = product_content.find("h4",
+                                                            class_=re.compile("^product-info-contents_subHeading"))\
+                    .find_next_sibling("p").text
+                print("product_info_content: ", product_info_content)
                 # TODO: get product price
                 # TODO: get product summary
                 # TODO: get product info
