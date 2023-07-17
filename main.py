@@ -4,6 +4,7 @@ import re
 import urllib.parse
 import asyncio
 import aiohttp
+import json
 from bs4 import BeautifulSoup
 from fpdf import FPDF
 
@@ -47,6 +48,23 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
         for i, product_categories_link in enumerate(product_categories_links):
             task = asyncio.ensure_future(fetch_category_page(session, product_categories_link))
             tasks.append(task)
+
+            load_more_element = BeautifulSoup(await task, "html.parser").find(attrs={"data-testhook": "load-more"})
+            span_element = load_more_element.find_previous_sibling("span", class_="typography_root__Om3Wh")
+
+            max_pagination = 1
+            if span_element:
+                text = span_element.text
+                numbers = re.findall(r'\d+', text)
+                if len(numbers) >= 2:
+                    total_results = int(numbers[1])
+                    products_per_page = 36
+                    max_pagination = (total_results + products_per_page - 1) // products_per_page
+
+            product_category_link = albert_heijn_url + product_categories_link + "?page=" + str(max_pagination)
+
+            task = asyncio.ensure_future(fetch_category_page(session, product_category_link))
+            tasks.append(task)
             await asyncio.sleep(random.uniform(3, 5))  # Introduce a delay between requests
 
             product_category_page = await task
@@ -61,6 +79,23 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
 
                 product_page = await task
                 product_content = BeautifulSoup(product_page, "html.parser").find(id="start-of-content")
+
+                if product_content is None:
+                    break
+
+                # TODO: get product name
+                product_name = product_content.find("h1", class_=re.compile("^product-card-header_title")).text
+                product_price = product_content.find(attrs={"data-testhook": "price-amount"}).text
+                print("product price: ", product_price)
+                # TODO: get product price
+                # TODO: get product summary
+                # TODO: get product info
+                # TODO: get product image src
+                # TODO: get product content and weight (e.g: 186 gram in total)
+                # TODO: get proteins from nutritional table
+                # TODO: extend this function to filter products also within protein range (decimals)
+                # TODO: get nutritional table measurement (e.g: per 100 gram or per 100 millimeters)
+
                 calories_data_element = product_content.find('td', string=lambda
                     table_data_text: table_data_text and 'kcal' in table_data_text)
                 # check if product page contains nutritional values data
@@ -77,7 +112,10 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
                         print("\nproduct link: ", product_info.link)
                         print("calories: ", product_info.calories)
 
-    return all_products_info
+    # Sort products by calories from lowest to highest
+    sorted_products_info = sorted(all_products_info, key=lambda x: int(x.calories.split()[0]))
+
+    return sorted_products_info
 
 
 async def create_pdf(products_info, max_calories):
@@ -102,8 +140,28 @@ async def create_pdf(products_info, max_calories):
     print("PDF created!")
 
 
+async def get_sorted_products_info_json(sorted_products_info):
+    sorted_products_info_json = []
+    for product_info in sorted_products_info:
+        product_info_json = {
+            'link': product_info.link,
+            'calories': product_info.calories
+        }
+        sorted_products_info_json.append(product_info_json)
+
+    return json.dumps(sorted_products_info_json)
+
+
+async def save_json_to_file(filename, data):
+    with open(filename, 'w') as file:
+        json.dump(data, file, indent=4)
+
+
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     products_info = loop.run_until_complete(get_products_info_within_calorie_range(250, 5))
+    sorted_products_info_json = loop.run_until_complete(get_sorted_products_info_json(products_info))
+    loop.run_until_complete(save_json_to_file("sorted_products_info.json", sorted_products_info_json))
     loop.run_until_complete(create_pdf(products_info, 250))
     loop.close()
+
