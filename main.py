@@ -12,7 +12,8 @@ albert_heijn_url = "https://www.ah.nl"
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36"
 }
-ProductInfo = collections.namedtuple('ProductInfo', ['link', 'calories'])
+ProductInfo = collections.namedtuple('ProductInfo', ['name', 'price', 'imageSrc', 'link', 'summary', 'description',
+                                                     'measuredContent', 'calories', 'protein'])
 
 
 async def fetch_product_categories(session):
@@ -38,7 +39,7 @@ async def fetch_product_page(session, product_link):
         return await response.text()
 
 
-async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5):
+async def get_products_info_within_calorie_range(min_proteins=None, max_calories=300, rate_limit=5):
     all_products_info = []
     connector = aiohttp.TCPConnector(limit=rate_limit, limit_per_host=rate_limit, ssl=False)
     async with aiohttp.ClientSession(headers=headers, connector=connector) as session:
@@ -83,44 +84,91 @@ async def get_products_info_within_calorie_range(max_calories=300, rate_limit=5)
                 if product_content is None:
                     break
 
-                # TODO: get product name
-                product_name = product_content.find("h1", class_=re.compile("^product-card-header_title")).text
-                product_price = product_content.find(attrs={"data-testhook": "price-amount"}).text
-                product_summary = product_content.find(attrs={"data-testhook": "product-summary"}).text
-                product_info_description = product_content.find(attrs={"data-testhook": "product-info-description"}).text
-                product_image_src = product_content.find(attrs={"data-testhook": "product-image"})["src"]
-                product_info_content = product_content.find("h4",
-                                                            class_=re.compile("^product-info-contents_subHeading"))\
-                    .find_next_sibling("p").text
-                print("product_info_content: ", product_info_content)
-                # TODO: get product price
-                # TODO: get product summary
-                # TODO: get product info
-                # TODO: get product image src
-                # TODO: get product content and weight (e.g: 186 gram in total)
-                # TODO: get proteins from nutritional table
-                # TODO: extend this function to filter products also within protein range (decimals)
-                # TODO: get nutritional table measurement (e.g: per 100 gram or per 100 millimeters)
+                # Extract product information
+                product_name_element = product_content.find("h1", class_=re.compile("^product-card-header_title"))
+                product_name = product_name_element.text if product_name_element else None
 
-                calories_data_element = product_content.find('td', string=lambda
-                    table_data_text: table_data_text and 'kcal' in table_data_text)
-                # check if product page contains nutritional values data
-                if calories_data_element is None:
+                product_price_element = product_content.find(attrs={"data-testhook": "price-amount"})
+                product_price = product_price_element.text if product_price_element else None
+
+                product_summary_element = product_content.find(attrs={"data-testhook": "product-summary"})
+                product_summary = product_summary_element.text if product_summary_element else None
+
+                product_info_description_element = product_content.find(
+                    attrs={"data-testhook": "product-info-description"})
+                product_info_description = product_info_description_element.text if product_info_description_element else None
+
+                product_image_src_element = product_content.find(attrs={"data-testhook": "product-image"})
+                product_image_src = product_image_src_element["src"] if product_image_src_element else None
+
+                product_info_content_element = product_content.find("h4", class_=re.compile(
+                    "^product-info-contents_subHeading"))
+                product_info_content = product_info_content_element.find_next_sibling(
+                    "p").text if product_info_content_element else None
+
+                # Extract nutritional information
+                nutritional_table = product_content.find("table", class_=re.compile("^product-info-nutrition_table"))
+                if nutritional_table:
+                    calories_data_element = nutritional_table.find('td', string=lambda
+                        table_data_text: table_data_text and 'kcal' in table_data_text)
+                    protein_data_element = nutritional_table.find('td', string='Eiwitten')
+                else:
+                    calories_data_element = None
+                    protein_data_element = None
+
+                # check if product page contains nutritional data (calories and proteins)
+                if calories_data_element and protein_data_element is None:
                     break
-                text = calories_data_element.text
-                calories = re.search(r'\((\d+) kcal\)', text)
-                if calories:
+
+                calories_data_element_text = calories_data_element.text if calories_data_element else None
+                protein_data_element_text = protein_data_element.find_next_sibling(
+                    'td').text if protein_data_element else None
+
+                # Extract calories and proteins
+                calories = re.search(r'(\d+)\s*kcal',
+                                     calories_data_element_text) if calories_data_element_text else None
+                proteins = re.search(r'\d+(\.\d+)?', protein_data_element_text) if protein_data_element_text else None
+
+                if calories is not None:
                     calorie_value_of_product = int(calories.group(1))
-                    if calorie_value_of_product <= max_calories:
-                        product_info = ProductInfo(link=albert_heijn_url + str(product_card.find("a")["href"]),
-                                                   calories=str(calorie_value_of_product) + " kcal per 100 Gram")
+                else:
+                    calorie_value_of_product = 0
+                if proteins is not None:
+                    proteins_value_of_product = float(proteins.group())
+                else:
+                    proteins_value_of_product = 0.0
+
+                # Handle cases where calories and proteins are not available
+                if calorie_value_of_product == 0:
+                    calories_message = "Calories data could not be retrieved."
+                else:
+                    calories_message = str(calorie_value_of_product) + " kcal per 100 Gram"
+
+                if proteins_value_of_product in [None, 0]:
+                    proteins_message = "Protein data could not be retrieved."
+                else:
+                    proteins_message = str(proteins_value_of_product) + " g"
+
+                # Filter based on calorie range and protein content (if provided)
+                if calorie_value_of_product <= max_calories:
+                    if min_proteins is None or proteins_value_of_product >= min_proteins:
+                        product_info = ProductInfo(
+                            name=product_name,
+                            price=product_price,
+                            imageSrc=product_image_src,
+                            link=albert_heijn_url + str(product_card.find("a")["href"]),
+                            summary=product_summary,
+                            description=product_info_description,
+                            measuredContent=product_info_content,
+                            calories=calories_message,
+                            protein=proteins_message)
                         all_products_info.append(product_info)
-                        print("\nproduct link: ", product_info.link)
-                        print("calories: ", product_info.calories)
+                        print("product_info: ", product_info)
 
-    # Sort products by calories from lowest to highest
-    sorted_products_info = sorted(all_products_info, key=lambda x: int(x.calories.split()[0]))
-
+    # Sort products by calories and proteins from lowest to highest
+    sorted_products_info = sorted(all_products_info, key=lambda x: (int(x.calories.split()[0]),
+                                                                    float(x.protein.split()[0])
+                                                                    if x.protein else float('inf')))
     return sorted_products_info
 
 
@@ -165,9 +213,8 @@ async def save_json_to_file(filename, data):
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    products_info = loop.run_until_complete(get_products_info_within_calorie_range(250, 5))
+    products_info = loop.run_until_complete(get_products_info_within_calorie_range(max_calories=250, rate_limit=5))
     sorted_products_info_json = loop.run_until_complete(get_sorted_products_info_json(products_info))
     loop.run_until_complete(save_json_to_file("sorted_products_info.json", sorted_products_info_json))
     loop.run_until_complete(create_pdf(products_info, 250))
     loop.close()
-
