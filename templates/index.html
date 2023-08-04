@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sorted Product Info</title>
+    <!-- Add Bootstrap CSS link -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center mb-4">Sorted Product Info</h1>
+        <div class="row">
+            {% for product in sorted_products_info_json %}
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <img src="{{ product['imageSrc'] }}" class="card-img-top" alt="{{ product['name'] }}">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ product['name'] }}</h5>
+                        <p class="card-text">Price: {{ product['price'] }}</p>
+                        <p class="card-text">Summary: {{ product['summary'] }}</p>
+                        <p class="card-text">Description: {{ product['description'] }}</p>
+                        <p class="card-text">Measured Content: {{ product['measuredContent'] }}</p>
+                        <p class="card-text">Calories: {{ product['calories'] }}</p>
+                        <p class="card-text">Protein: {{ product['protein'] }}</p>
+                        <a href="{{ product['link'] }}" class="btn btn-primary">More Details</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>

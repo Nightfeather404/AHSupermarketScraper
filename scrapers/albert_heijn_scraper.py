@@ -172,34 +172,19 @@ async def get_products_info_within_calorie_range(min_proteins=None, max_calories
     return sorted_products_info
 
 
-async def create_pdf(products_info, max_calories):
-    pdf = FPDF()
-    pdf.add_page()
-
-    # Set font style and size
-    pdf.set_font("Arial", size=12)
-
-    # Add content to the PDF
-    for product_info in products_info:
-        link = product_info.link
-        calories = product_info.calories
-
-        # Write the product link and calories to the PDF
-        pdf.cell(0, 10, f"Product Link: {link}", ln=True)
-        pdf.cell(0, 10, f"Calories: {calories}", ln=True)
-        pdf.cell(0, 10, "", ln=True)  # Add empty line between entries
-
-    # Save the PDF
-    pdf.output(f"products_info_within_calorie_range_of_{max_calories}.pdf")
-    print("PDF created!")
-
-
 async def get_sorted_products_info_json(sorted_products_info):
     sorted_products_info_json = []
     for product_info in sorted_products_info:
         product_info_json = {
+            'name': product_info.name,
+            'price': product_info.price,
+            'imageSrc': product_info.imageSrc,
             'link': product_info.link,
-            'calories': product_info.calories
+            'summary': product_info.summary,
+            'description': product_info.description,
+            'measuredContent': product_info.measuredContent,
+            'calories': product_info.calories,
+            'protein': product_info.protein
         }
         sorted_products_info_json.append(product_info_json)
 
@@ -213,8 +198,9 @@ async def save_json_to_file(filename, data):
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    products_info = loop.run_until_complete(get_products_info_within_calorie_range(max_calories=250, rate_limit=5))
+    products_info = loop.run_until_complete(get_products_info_within_calorie_range(min_proteins=5,
+                                                                                   max_calories=250,
+                                                                                   rate_limit=5))
     sorted_products_info_json = loop.run_until_complete(get_sorted_products_info_json(products_info))
-    loop.run_until_complete(save_json_to_file("sorted_products_info.json", sorted_products_info_json))
-    loop.run_until_complete(create_pdf(products_info, 250))
+    loop.run_until_complete(save_json_to_file("../static/sorted_products_info.json", sorted_products_info_json))
     loop.close()
