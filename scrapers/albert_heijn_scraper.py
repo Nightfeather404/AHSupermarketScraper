@@ -68,7 +68,7 @@ async def get_products_info_within_calorie_range(min_proteins=None, max_calories
 
             task = asyncio.ensure_future(fetch_category_page(session, product_category_link))
             tasks.append(task)
-            await asyncio.sleep(random.uniform(4, 6))  # Introduce a delay between requests
+            await asyncio.sleep(random.uniform(5, 10))  # Introduce a delay between requests
 
             product_category_page = await task
             product_category_content = BeautifulSoup(product_category_page, "html.parser").find(id="start-of-content")
@@ -78,7 +78,7 @@ async def get_products_info_within_calorie_range(min_proteins=None, max_calories
                 product_link = product_card.find("a")["href"]
                 task = asyncio.ensure_future(fetch_product_page(session, product_link))
                 tasks.append(task)
-                await asyncio.sleep(random.uniform(4, 6))  # Introduce a delay between requests
+                await asyncio.sleep(random.uniform(5, 10))  # Introduce a delay between requests
 
                 product_page = await task
                 product_content = BeautifulSoup(product_page, "html.parser").find(id="start-of-content")
