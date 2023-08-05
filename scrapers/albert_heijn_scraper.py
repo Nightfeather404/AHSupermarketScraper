@@ -6,7 +6,6 @@ import asyncio
 import aiohttp
 import json
 from bs4 import BeautifulSoup
-from fpdf import FPDF
 
 albert_heijn_url = "https://www.ah.nl"
 headers = {
@@ -51,7 +50,10 @@ async def get_products_info_within_calorie_range(min_proteins=None, max_calories
             tasks.append(task)
 
             load_more_element = BeautifulSoup(await task, "html.parser").find(attrs={"data-testhook": "load-more"})
-            span_element = load_more_element.find_previous_sibling("span", class_="typography_root__Om3Wh")
+            span_element = None
+
+            if load_more_element:
+                span_element = load_more_element.find_previous_sibling("span", class_="typography_root__Om3Wh")
 
             max_pagination = 1
             if span_element:
@@ -66,7 +68,7 @@ async def get_products_info_within_calorie_range(min_proteins=None, max_calories
 
             task = asyncio.ensure_future(fetch_category_page(session, product_category_link))
             tasks.append(task)
-            await asyncio.sleep(random.uniform(3, 5))  # Introduce a delay between requests
+            await asyncio.sleep(random.uniform(4, 6))  # Introduce a delay between requests
 
             product_category_page = await task
             product_category_content = BeautifulSoup(product_category_page, "html.parser").find(id="start-of-content")
@@ -76,7 +78,7 @@ async def get_products_info_within_calorie_range(min_proteins=None, max_calories
                 product_link = product_card.find("a")["href"]
                 task = asyncio.ensure_future(fetch_product_page(session, product_link))
                 tasks.append(task)
-                await asyncio.sleep(random.uniform(3, 5))  # Introduce a delay between requests
+                await asyncio.sleep(random.uniform(4, 6))  # Introduce a delay between requests
 
                 product_page = await task
                 product_content = BeautifulSoup(product_page, "html.parser").find(id="start-of-content")
